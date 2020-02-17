@@ -74,4 +74,4 @@ class LiberTEMPanel(Panel.Panel):
 def run():
     Registry.register_component(LiberTEMUI(), {'libertem-panel'})
     panel_properties = {'panel_type': 'libertem-panel'}
-    Workspace.WorkspaceManager().register_panel(LiberTEMPanel, 'libertem-processing-panel', _('LibertTEM'), ['left', 'right'], 'right', panel_properties)
+    Workspace.WorkspaceManager().register_panel(LiberTEMPanel, 'libertem-processing-panel', _('LiberTEM'), ['left', 'right'], 'right', panel_properties)
