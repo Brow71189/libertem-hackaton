@@ -2,11 +2,17 @@ import typing
 import gettext
 import asyncio
 
+import numpy as np
+
 from nion.utils import Event, Registry
 from nion.ui import Declarative
 from nion.swift.model import PlugInManager
 from nion.swift import Workspace, DocumentController, Panel, Facade
 from nion.typeshed import API_1_0
+
+from libertem.executor.dask import DaskJobExecutor
+from libertem.udf.base import UDFRunner
+from libertem.udf.masks import ApplyMaskUDF
 
 
 _ = gettext.gettext
@@ -31,9 +37,29 @@ class LiberTEMUIHandler:
         self.__api = api
         self.__event_loop = event_loop
         self.property_changed_event = Event.Event()
+        self.executor = self.get_libertem_executor()
 
-    def open_button_clicked(widget: Declarative.UIWidget):
-        ...
+    def get_libertem_executor(self):
+        return DaskJobExecutor.make_local()
+
+    def load_data(self, *args, **kwargs):
+        ds = self.executor.run_function(load, filetype, *args, **kwargs)
+        ds = ds.initialize(self.executor)
+        ds.set_num_cores(len(self.executor.get_available_workers()))
+        self.executor.run_function(ds.check_valid)
+        return ds
+
+    def open_button_clicked(self, widget: Declarative.UIWidget):
+        ds = self.load_data(
+            "hdf5",
+            path="/home/clausen/Data/HDF5/calibrationData_bullseyeProbe.h5",
+            ds_path="4DSTEM_experiment/data/datacubes/polyAu_4DSTEM/data",
+        )
+        udf = ApplyMaskUDF(mask_factories=[lambda: np.ones(ds.shape.sig)])
+        result = UDFRunner(udf).run_for_dataset(
+            ds, executor, roi=None, cancel_id="42",
+        )
+        np.array(result.intensity)
     
     def init_handler(self):
         ...
