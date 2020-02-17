@@ -1,6 +1,7 @@
 import typing
 import gettext
 import asyncio
+import os
 
 import numpy as np
 
@@ -13,6 +14,7 @@ from nion.typeshed import API_1_0
 from libertem.executor.dask import DaskJobExecutor
 from libertem.udf.base import UDFRunner
 from libertem.udf.masks import ApplyMaskUDF
+from libertem.io.dataset import load
 
 
 _ = gettext.gettext
@@ -43,23 +45,35 @@ class LiberTEMUIHandler:
         return DaskJobExecutor.make_local()
 
     def load_data(self, *args, **kwargs):
-        ds = self.executor.run_function(load, filetype, *args, **kwargs)
+        ds = self.executor.run_function(load, *args, **kwargs)
         ds = ds.initialize(self.executor)
         ds.set_num_cores(len(self.executor.get_available_workers()))
         self.executor.run_function(ds.check_valid)
         return ds
 
     def open_button_clicked(self, widget: Declarative.UIWidget):
-        ds = self.load_data(
-            "hdf5",
-            path="/home/clausen/Data/HDF5/calibrationData_bullseyeProbe.h5",
-            ds_path="4DSTEM_experiment/data/datacubes/polyAu_4DSTEM/data",
-        )
-        udf = ApplyMaskUDF(mask_factories=[lambda: np.ones(ds.shape.sig)])
-        result = UDFRunner(udf).run_for_dataset(
-            ds, executor, roi=None, cancel_id="42",
-        )
-        np.array(result.intensity)
+        file_path = self.file_path_field.text
+        if file_path.endswith(('h5', 'hdf5')) and os.path.isfile(file_path):
+            ds = self.load_data(
+                "hdf5",
+                path=file_path,
+                ds_path="4DSTEM_experiment/data/datacubes/polyAu_4DSTEM/data",
+            )
+            udf = ApplyMaskUDF(mask_factories=[lambda: np.ones(ds.shape.sig)])
+            result = UDFRunner(udf).run_for_dataset(
+                ds, self.executor, roi=None, cancel_id="42",
+            )
+            result_array = np.array(result.intensity)
+            data_descriptor = self.__api.create_data_descriptor(True, 0, 2)
+            dimensional_calibrations = [self.__api.create_calibration(), self.__api.create_calibration()]
+            intensity_calibration = self.__api.create_calibration()
+            xdata = self.__api.create_data_and_metadata(result_array, dimensional_calibrations=dimensional_calibrations,
+                                                        intensity_calibration=intensity_calibration,
+                                                        data_descriptor=data_descriptor)
+            data_item = self.__api.library.create_data_item_from_data_and_metadata(xdata, title='Result')
+            document_controller = self.__api.application.document_controllers[0]._document_controller
+            display_item = document_controller.document_model.get_display_item_for_data_item(data_item)
+            show_display_item(document_controller.document_window, display_item)
     
     def init_handler(self):
         ...
@@ -81,7 +95,7 @@ class LiberTEMUI:
 
     def __create_ui_view(self, ui: Declarative.DeclarativeUI) -> dict:
         open_button = ui.create_push_button(text='Open', on_clicked='open_button_clicked')
-        file_path_field = ui.create_line_edit()
+        file_path_field = ui.create_line_edit(name='file_path_field')
         open_row = ui.create_row(file_path_field, open_button, ui.create_stretch(), spacing=8, margin=4)
         content = ui.create_column(open_row, ui.create_stretch(), spacing=8, margin=4)
 
