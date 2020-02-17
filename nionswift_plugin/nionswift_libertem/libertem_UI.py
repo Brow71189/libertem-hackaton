@@ -13,7 +13,7 @@ from nion.typeshed import API_1_0
 
 from libertem.executor.dask import DaskJobExecutor
 from libertem.udf.base import UDFRunner
-from libertem.udf.masks import ApplyMaskUDF
+from libertem.udf.masks import ApplyMasksUDF
 from libertem.io.dataset import load
 
 
@@ -59,21 +59,27 @@ class LiberTEMUIHandler:
                 path=file_path,
                 ds_path="4DSTEM_experiment/data/datacubes/polyAu_4DSTEM/data",
             )
-            udf = ApplyMaskUDF(mask_factories=[lambda: np.ones(ds.shape.sig)])
+            udf = ApplyMasksUDF(mask_factories=[lambda: np.ones(ds.shape.sig)])
             result = UDFRunner(udf).run_for_dataset(
-                ds, self.executor, roi=None, cancel_id="42",
+                ds, self.executor, roi=None,# cancel_id="42",
             )
-            result_array = np.array(result.intensity)
+            result_array = np.swapaxes(np.array(result['intensity']), -1, 0)
+            print(result_array.shape)
             data_descriptor = self.__api.create_data_descriptor(True, 0, 2)
-            dimensional_calibrations = [self.__api.create_calibration(), self.__api.create_calibration()]
+            dimensional_calibrations = [
+                    self.__api.create_calibration(),
+                    self.__api.create_calibration(),
+                    self.__api.create_calibration()
+            ]
             intensity_calibration = self.__api.create_calibration()
             xdata = self.__api.create_data_and_metadata(result_array, dimensional_calibrations=dimensional_calibrations,
                                                         intensity_calibration=intensity_calibration,
                                                         data_descriptor=data_descriptor)
             data_item = self.__api.library.create_data_item_from_data_and_metadata(xdata, title='Result')
             document_controller = self.__api.application.document_controllers[0]._document_controller
+            document_window = self.__api.application.document_controllers[0]
             display_item = document_controller.document_model.get_display_item_for_data_item(data_item)
-            show_display_item(document_controller.document_window, display_item)
+            show_display_item(document_window, display_item)
     
     def init_handler(self):
         ...
