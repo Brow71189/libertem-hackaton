@@ -118,7 +118,8 @@ class LiberTEMUIHandler:
                 ds_path="4DSTEM_experiment/data/datacubes/polyAu_4DSTEM/data",
                 min_num_partitions=8,
             )
-            udf = ApplyMasksUDF(mask_factories=[lambda: np.ones(ds.shape.sig)])
+            shape = ds.shape.sig
+            udf = ApplyMasksUDF(mask_factories=[lambda: np.ones(shape)])
             self.__event_loop.create_task(self.run_udf(udf, dataset=ds))
             
 
