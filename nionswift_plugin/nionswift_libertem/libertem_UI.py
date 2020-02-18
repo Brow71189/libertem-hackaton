@@ -13,8 +13,9 @@ from nion.swift.model import PlugInManager
 from nion.swift import Workspace, DocumentController, Panel, Facade
 from nion.typeshed import API_1_0
 
+from libertem.executor.base import AsyncAdapter
 from libertem.executor.dask import DaskJobExecutor
-from libertem.udf.base import UDFRunner
+from libertem.udf.base import UDFRunner, UDF
 from libertem.udf.masks import ApplyMasksUDF
 from libertem.io.dataset import load
 
@@ -43,14 +44,57 @@ class LiberTEMUIHandler:
         self.property_changed_event = Event.Event()
 
     def get_libertem_executor(self):
-        return DaskJobExecutor.make_local()
+        executor = DaskJobExecutor.make_local()
+        return AsyncAdapter(wrapped=executor)
 
     def load_data(self, *args, **kwargs):
-        ds = self.executor.run_function(load, *args, **kwargs)
-        ds = ds.initialize(self.executor)
-        ds.set_num_cores(len(self.executor.get_available_workers()))
-        self.executor.run_function(ds.check_valid)
+        sync_executor = self.executor._wrapped
+        ds = sync_executor.run_function(load, *args, **kwargs)
+        ds = ds.initialize(sync_executor)
+        ds.set_num_cores(len(sync_executor.get_available_workers()))
+        sync_executor.run_function(ds.check_valid)
         return ds
+
+    async def run_udf(self, udf: UDF, dataset, roi=None):
+        result_iter = UDFRunner(udf).run_for_dataset_async(
+            dataset, self.executor, roi=roi, cancel_id="42",
+        )
+
+        data_item = None
+
+        async for result in result_iter:
+            result_array = np.swapaxes(np.array(result['intensity']), -1, 0)
+            if data_item is None:
+                data_item = self.show_results(result_array=result_array)
+            else:
+                xdata = self.get_xdata_for_results(result_array)
+                data_item.set_data_and_metadata(xdata)
+
+    def get_xdata_for_results(self, result_array):
+        data_descriptor = self.__api.create_data_descriptor(True, 0, 2)
+        dimensional_calibrations = [
+                self.__api.create_calibration(),
+                self.__api.create_calibration(),
+                self.__api.create_calibration()
+        ]
+        intensity_calibration = self.__api.create_calibration()
+        xdata = self.__api.create_data_and_metadata(result_array, dimensional_calibrations=dimensional_calibrations,
+                                                    intensity_calibration=intensity_calibration,
+                                                    data_descriptor=data_descriptor)
+        return xdata
+
+    def get_data_item_for_results(self, xdata):
+        data_item = self.__api.library.create_data_item_from_data_and_metadata(xdata, title='Result')
+        return data_item
+
+    def show_results(self, result_array):
+        xdata = self.get_xdata_for_results(result_array)
+        data_item = self.get_data_item_for_results(xdata)
+        document_controller = self.__api.application.document_controllers[0]._document_controller
+        document_window = self.__api.application.document_controllers[0]
+        display_item = document_controller.document_model.get_display_item_for_data_item(data_item)
+        show_display_item(document_window, display_item)
+        return data_item
 
     def open_button_clicked(self, widget: Declarative.UIWidget):
         file_path = self.file_path_field.text
@@ -59,29 +103,11 @@ class LiberTEMUIHandler:
                 "hdf5",
                 path=file_path,
                 ds_path="4DSTEM_experiment/data/datacubes/polyAu_4DSTEM/data",
+                min_num_partitions=8,
             )
             udf = ApplyMasksUDF(mask_factories=[lambda: np.ones(ds.shape.sig)])
-            result = UDFRunner(udf).run_for_dataset(
-                ds, self.executor, roi=None,# cancel_id="42",
-            )
-            result_array = np.swapaxes(np.array(result['intensity']), -1, 0)
-            print(result_array.shape)
-            data_descriptor = self.__api.create_data_descriptor(True, 0, 2)
-            dimensional_calibrations = [
-                    self.__api.create_calibration(),
-                    self.__api.create_calibration(),
-                    self.__api.create_calibration()
-            ]
-            intensity_calibration = self.__api.create_calibration()
-            xdata = self.__api.create_data_and_metadata(result_array, dimensional_calibrations=dimensional_calibrations,
-                                                        intensity_calibration=intensity_calibration,
-                                                        data_descriptor=data_descriptor)
-            data_item = self.__api.library.create_data_item_from_data_and_metadata(xdata, title='Result')
-            document_controller = self.__api.application.document_controllers[0]._document_controller
-            document_window = self.__api.application.document_controllers[0]
-            display_item = document_controller.document_model.get_display_item_for_data_item(data_item)
-            show_display_item(document_window, display_item)
-    
+            self.__event_loop.create_task(self.run_udf(udf, dataset=ds))
+
     def init_handler(self):
         # Needed for method "spawn" (on Windows) to prevent mutliple Swift instances from being started
         if multiprocessing.get_start_method() == 'spawn':
