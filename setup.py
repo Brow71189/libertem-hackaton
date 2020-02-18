@@ -7,7 +7,7 @@ setuptools.setup(
         author='',
         author_email='',
         description='Libertem integration into Nion Swift',
-        packages=['nionswift_plugin/nionswift_libertem'],
+        packages=['nionswift_plugin/nionswift_libertem', 'nionswift_plugin/LiberTEM_IO'],
         install_requires=['nionswift', 'liberTEM'],
         classifiers=[
             'Development Status :: 2 - Pre-Alpha',
