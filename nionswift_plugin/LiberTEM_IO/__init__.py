@@ -31,7 +31,7 @@ class LiberTEMIODelegate:
         self.__ui = ui
         self.io_handler_id = 'libertem_IO_handler'
         self.io_handler_name = 'LiberTEM'
-        self.io_handler_extensions = list(dataset.filetypes.keys()) + ['hdr']
+        self.io_handler_extensions = dataset.get_extensions()
         
     def can_write_data_and_metadata(self, data_and_metadata, extension):
         return False
@@ -51,14 +51,7 @@ class LiberTEMIODelegate:
             logging.error(f'Cannot load file {stream} with the LiberTEM backend.')
             return
             
-        def load_data(*args, **kwargs):
-            ds = executor.run_function(dataset.load, *args, **kwargs)
-            ds = ds.initialize(executor)
-            ds.set_num_cores(len(executor.get_available_workers()))
-            executor.run_function(ds.check_valid)
-            return ds
-        
-        ds = load_data(file_type, **file_parameters)
+        ds = dataset.load(file_type, executor, **file_parameters)
         roi = np.zeros(ds.shape.nav, dtype=bool)
         roi_flat = roi.ravel()
         roi_flat[0] = True
