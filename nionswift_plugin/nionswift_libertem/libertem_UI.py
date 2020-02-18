@@ -46,6 +46,19 @@ class LiberTEMUIHandler:
         self.property_changed_event = Event.Event()
         self.__file_param_dialog_open = False
 
+
+    def init_handler(self):
+        # Needed for method "spawn" (on Windows) to prevent mutliple Swift instances from being started
+        if multiprocessing.get_start_method() == 'spawn':
+            multiprocessing.set_executable(os.path.join(sys.exec_prefix, 'pythonw.exe'))
+        self.executor = self.get_libertem_executor()
+        Registry.register_component(self.executor, {'libertem_executor'})
+
+    def close(self):
+        ...
+
+
+
     def get_libertem_executor(self):
         executor = DaskJobExecutor.make_local()
         return AsyncAdapter(wrapped=executor)
@@ -137,15 +150,6 @@ class LiberTEMUIHandler:
             shape = ds.shape.sig
             udf = ApplyMasksUDF(mask_factories=[lambda: np.ones(shape)])
             self.__event_loop.create_task(self.run_udf(udf, dataset=ds))
-
-    def init_handler(self):
-        # Needed for method "spawn" (on Windows) to prevent mutliple Swift instances from being started
-        if multiprocessing.get_start_method() == 'spawn':
-            multiprocessing.set_executable(os.path.join(sys.exec_prefix, 'pythonw.exe'))
-        self.executor = self.get_libertem_executor()
-
-    def close(self):
-        ...
 
 
 class LiberTEMUI:
