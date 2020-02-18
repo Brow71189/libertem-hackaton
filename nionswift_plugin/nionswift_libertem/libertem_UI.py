@@ -2,6 +2,8 @@ import typing
 import gettext
 import asyncio
 import os
+import multiprocessing
+import sys
 
 import numpy as np
 
@@ -39,7 +41,6 @@ class LiberTEMUIHandler:
         self.__api = api
         self.__event_loop = event_loop
         self.property_changed_event = Event.Event()
-        self.executor = self.get_libertem_executor()
 
     def get_libertem_executor(self):
         return DaskJobExecutor.make_local()
@@ -82,7 +83,10 @@ class LiberTEMUIHandler:
             show_display_item(document_window, display_item)
     
     def init_handler(self):
-        ...
+        # Needed for method "spawn" (on Windows) to prevent mutliple Swift instances from being started
+        if multiprocessing.get_start_method() == 'spawn':
+            multiprocessing.set_executable(os.path.join(sys.exec_prefix, 'pythonw.exe'))
+        self.executor = self.get_libertem_executor()
 
     def close(self):
         ...
