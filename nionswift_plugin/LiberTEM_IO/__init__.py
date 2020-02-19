@@ -6,10 +6,8 @@
 # standard libraries
 import gettext
 import logging
-import warnings
+import threading
 
-import datetime
-import json
 import numpy as np
 
 
@@ -18,7 +16,11 @@ from libertem.udf.raw import PickUDF
 from libertem.udf.base import UDFRunner
 # local libraries
 from nion.utils import Registry
+from nion.ui import Declarative
+from nion.swift.model import PlugInManager
 from nion.typeshed import API_1_0, UI_1_0
+
+from .OpenFileDialog import OpenFileDialogUI
 
 
 _ = gettext.gettext
@@ -32,6 +34,32 @@ class LiberTEMIODelegate:
         self.io_handler_id = 'libertem_IO_handler'
         self.io_handler_name = 'LiberTEM'
         self.io_handler_extensions = dataset.get_extensions()
+        self.__file_param_dialog_closed_event = threading.Event()
+        self.__file_param_dialog_closed_event.set()
+        self.__show_file_param_dialog_finished_event = threading.Event()
+        
+    def show_file_param_dialog(self, file_ext: str=None, params_callback: callable=None):
+        if self.__file_param_dialog_closed_event.is_set():
+            document_controller = self.__api.application.document_controllers[0]._document_controller
+            ui_handler = OpenFileDialogUI().get_ui_handler(api_broker=PlugInManager.APIBroker(),event_loop=document_controller.event_loop,file_ext=file_ext,title='File')
+            def dialog_closed():
+                self.__file_param_dialog_closed_event.set()
+            ui_handler.on_closed = dialog_closed
+
+            ui_handler.params_callback = params_callback
+
+            finishes = list()
+            dialog = Declarative.construct(document_controller.ui, document_controller, ui_handler.ui_view, ui_handler, finishes)
+            for finish in finishes:
+                finish()
+            ui_handler._event_loop = document_controller.event_loop
+            if callable(getattr(ui_handler, 'init_handler', None)):
+                ui_handler.init_handler()
+
+            dialog.show()
+
+            self.__file_param_dialog_closed_event.clear()
+        self.__show_file_param_dialog_finished_event.set()
         
     def can_write_data_and_metadata(self, data_and_metadata, extension):
         return False
@@ -50,7 +78,17 @@ class LiberTEMIODelegate:
         if file_type is None:
             logging.error(f'Cannot load file {stream} with the LiberTEM backend.')
             return
+        file_params = dict()
+        def params_callback(file_params_):
+            file_params.update(file_params_)
             
+        self.__api.queue_task(lambda: self.show_file_param_dialog(file_type, params_callback))
+        self.__show_file_param_dialog_finished_event.wait()
+        self.__show_file_param_dialog_finished_event.clear()
+        self.__file_param_dialog_closed_event.wait()
+        file_params.pop('name', None)
+        file_parameters.update(file_params)
+        
         ds = dataset.load(file_type, executor, **file_parameters)
         roi = np.zeros(ds.shape.nav, dtype=bool)
         roi_flat = roi.ravel()
