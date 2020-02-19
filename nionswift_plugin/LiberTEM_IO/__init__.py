@@ -33,7 +33,7 @@ class LiberTEMIODelegate:
         self.__ui = ui
         self.io_handler_id = 'libertem_IO_handler'
         self.io_handler_name = 'LiberTEM'
-        self.io_handler_extensions = dataset.get_extensions()
+        self.io_handler_extensions = list(dataset.get_extensions())
         self.__file_param_dialog_closed_event = threading.Event()
         self.__file_param_dialog_closed_event.set()
         self.__show_file_param_dialog_finished_event = threading.Event()
@@ -76,8 +76,7 @@ class LiberTEMIODelegate:
         file_parameters = dataset.detect(stream, executor=executor)
         file_type = file_parameters.pop('type', None)
         if file_type is None:
-            logging.error(f'Cannot load file {stream} with the LiberTEM backend.')
-            return
+            file_type = 'raw'
         file_params = dict()
         def params_callback(file_params_):
             file_params.update(file_params_)
