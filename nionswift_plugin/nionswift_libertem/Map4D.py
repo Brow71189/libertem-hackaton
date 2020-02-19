@@ -119,7 +119,8 @@ class Map4D:
             dc = self.__api.application.document_controllers[0]._document_controller
             if hasattr(self.computation._computation, 'cancel_id'):
                 print(f'Cancelling task: {self.computation._computation.cancel_id}')
-                self.__api.queue_task(lambda: self.__event_loop.create_task(executor.cancel(self.computation._computation.cancel_id)))
+                to_cancel = self.computation._computation.cancel_id
+                self.__api.queue_task(lambda: self.__event_loop.create_task(executor.cancel(to_cancel)))
                 #self.computation._computation.cancel_id = None
             self.computation._computation.cancel_id = str(time.time())
             print(f'Creating task: {self.computation._computation.cancel_id}')
