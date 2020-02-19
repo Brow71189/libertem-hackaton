@@ -19,8 +19,6 @@ from libertem.udf.base import UDFRunner, UDF
 from libertem.udf.masks import ApplyMasksUDF
 from libertem.io.dataset import load
 
-from .OpenFileDialog import OpenFileDialogUIHandler, OpenFileDialogUI
-
 
 _ = gettext.gettext
 
@@ -113,28 +111,29 @@ class LiberTEMUIHandler:
         return data_item
 
     def show_file_param_dialog(self, file_ext: str=None):
-        if not self.__file_param_dialog_open:
-            document_controller = self.__api.application.document_controllers[0]._document_controller
-            ui_handler = OpenFileDialogUI().get_ui_handler(api_broker=PlugInManager.APIBroker(),event_loop=document_controller.event_loop,file_ext=file_ext,title='File')
-            def dialog_closed():
-                self.__file_param_dialog_open = False
-            ui_handler.on_closed = dialog_closed
-
-            def params_callback(file_params):
-                print(file_params)
-            ui_handler.params_callback = params_callback
-
-            finishes = list()
-            dialog = Declarative.construct(document_controller.ui, document_controller, ui_handler.ui_view, ui_handler, finishes)
-            for finish in finishes:
-                finish()
-            ui_handler._event_loop = document_controller.event_loop
-            if callable(getattr(ui_handler, 'init_handler', None)):
-                ui_handler.init_handler()
-
-            dialog.show()
-
-            self.__file_param_dialog_open = True
+        ...
+#        if not self.__file_param_dialog_open:
+#            document_controller = self.__api.application.document_controllers[0]._document_controller
+#            ui_handler = OpenFileDialogUI().get_ui_handler(api_broker=PlugInManager.APIBroker(),event_loop=document_controller.event_loop,file_ext=file_ext,title='File')
+#            def dialog_closed():
+#                self.__file_param_dialog_open = False
+#            ui_handler.on_closed = dialog_closed
+#
+#            def params_callback(file_params):
+#                print(file_params)
+#            ui_handler.params_callback = params_callback
+#
+#            finishes = list()
+#            dialog = Declarative.construct(document_controller.ui, document_controller, ui_handler.ui_view, ui_handler, finishes)
+#            for finish in finishes:
+#                finish()
+#            ui_handler._event_loop = document_controller.event_loop
+#            if callable(getattr(ui_handler, 'init_handler', None)):
+#                ui_handler.init_handler()
+#
+#            dialog.show()
+#
+#            self.__file_param_dialog_open = True
 
     def open_button_clicked(self, widget: Declarative.UIWidget):
         file_path = self.file_path_field.text

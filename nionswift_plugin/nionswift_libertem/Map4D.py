@@ -119,7 +119,8 @@ class Map4D:
             dc = self.__api.application.document_controllers[0]._document_controller
             if hasattr(self.computation._computation, 'cancel_id'):
                 print(f'Cancelling task: {self.computation._computation.cancel_id}')
-                self.__api.queue_task(lambda: self.__event_loop.create_task(executor.cancel(self.computation._computation.cancel_id)))
+                to_cancel = self.computation._computation.cancel_id
+                self.__api.queue_task(lambda: self.__event_loop.create_task(executor.cancel(to_cancel)))
                 #self.computation._computation.cancel_id = None
             self.computation._computation.cancel_id = str(time.time())
             print(f'Creating task: {self.computation._computation.cancel_id}')
@@ -236,8 +237,8 @@ class Map4DMenuItem:
             new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata)
             src.set_data_and_metadata(new_xdata)
 
-        computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(src.data.shape[0], 0))
-        computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(src.data.shape[1], 1))
+        computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(target.data.shape[0], 0))
+        computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(target.data.shape[1], 1))
         computation.pick_graphic_binding_0.target_setter = functools.partial(_update_collection_index, 0)
         computation.pick_graphic_binding_1.target_setter = functools.partial(_update_collection_index, 1)
         
