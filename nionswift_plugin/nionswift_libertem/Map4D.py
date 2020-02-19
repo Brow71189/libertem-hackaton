@@ -236,8 +236,8 @@ class Map4DMenuItem:
             new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata)
             src.set_data_and_metadata(new_xdata)
 
-        computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(src.data.shape[0], 0))
-        computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(src.data.shape[1], 1))
+        computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(target.data.shape[0], 0))
+        computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(target.data.shape[1], 1))
         computation.pick_graphic_binding_0.target_setter = functools.partial(_update_collection_index, 0)
         computation.pick_graphic_binding_1.target_setter = functools.partial(_update_collection_index, 1)
         
