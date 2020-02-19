@@ -26,6 +26,8 @@ class OpenFileDialogUIHandler:
     def on_load(self, widget: Declarative.UIWidget):
         if callable(self.params_callback):
             self.params_callback(self.__file_params)
+        if hasattr(self, 'request_close') and callable(self.request_close):
+            self.request_close()
 
     def close(self):
         if callable(self.on_closed):

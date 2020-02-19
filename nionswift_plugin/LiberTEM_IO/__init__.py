@@ -57,6 +57,8 @@ class LiberTEMIODelegate:
                 ui_handler.init_handler()
 
             dialog.show()
+            
+            ui_handler.request_close = dialog.request_close
 
             self.__file_param_dialog_closed_event.clear()
         self.__show_file_param_dialog_finished_event.set()
@@ -77,6 +79,7 @@ class LiberTEMIODelegate:
         file_type = file_parameters.pop('type', None)
         if file_type is None:
             file_type = 'raw'
+            file_parameters = {'path': stream}
         file_params = dict()
         def params_callback(file_params_):
             file_params.update(file_params_)
