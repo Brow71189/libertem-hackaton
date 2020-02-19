@@ -19,6 +19,7 @@ from libertem.io import dataset
 from libertem.udf.base import UDFRunner, UDF
 from libertem.udf.masks import ApplyMasksUDF
 from libertem.udf.raw import PickUDF
+from libertem.executor.base import JobCancelledError
 
 _ = gettext.gettext
 
@@ -78,24 +79,26 @@ class Map4D:
         return xdata
         
     async def run_udf(self, udf: UDF, cancel_id, executor, dataset, roi=None):
-        result_iter = UDFRunner(udf).run_for_dataset_async(
-            dataset, executor, roi=roi, cancel_id=cancel_id,
-        )
-
-        async for result in result_iter:
-            result_array = np.squeeze(np.swapaxes(np.array(result['intensity']), -1, 0))
-            self.__new_xdata = self.get_xdata_for_results(result_array)
-            self.commit()
+        try:
+            result_iter = UDFRunner(udf).run_for_dataset_async(
+                dataset, executor, roi=roi, cancel_id=cancel_id,
+            )
+    
+            async for result in result_iter:
+                result_array = np.squeeze(np.swapaxes(np.array(result['intensity']), -1, 0))
+                self.__new_xdata = self.get_xdata_for_results(result_array)
+                self.commit()
+        except JobCancelledError:
+            pass
             
-    def __run_analysis(self, src, map_regions):
-        ...
-
     def execute(self, src, map_regions):
         try:
             if hasattr(self.computation._computation, 'last_src_uuid') and hasattr(self.computation._computation, 'last_map_regions'):
                 map_regions_ = [region.persistent_dict for region in map_regions]
                 if str(src.uuid) == self.computation._computation.last_src_uuid and map_regions_ == self.computation._computation.last_map_regions:
                     return
+                if str(src.uuid) != self.computation._computation.last_src_uuid and hasattr(self.computation._computation, 'ds'):
+                    self.computation._computation.ds = None
             metadata = copy.deepcopy(src.xdata.metadata)
             libertem_metadata = metadata.get('libertem-io')
             if libertem_metadata is None:
@@ -113,17 +116,18 @@ class Map4D:
                     np.logical_or(mask_data, region.get_mask(shape), out=mask_data)
             else:
                 mask_data = np.ones(shape, dtype=np.bool)
-                
-            ds = dataset.load(file_type, executor.ensure_sync(), **file_parameters)
+            if hasattr(self.computation._computation, 'ds') and self.computation._computation.ds:
+                ds = self.computation._computation.ds
+            else:
+                ds = dataset.load(file_type, executor.ensure_sync(), **file_parameters)
+                self.computation._computation.ds = ds
             udf = ApplyMasksUDF(mask_factories=[lambda: mask_data])
             dc = self.__api.application.document_controllers[0]._document_controller
             if hasattr(self.computation._computation, 'cancel_id'):
-                print(f'Cancelling task: {self.computation._computation.cancel_id}')
                 to_cancel = self.computation._computation.cancel_id
                 self.__api.queue_task(lambda: self.__event_loop.create_task(executor.cancel(to_cancel)))
                 #self.computation._computation.cancel_id = None
             self.computation._computation.cancel_id = str(time.time())
-            print(f'Creating task: {self.computation._computation.cancel_id}')
             dc.add_task('libertem-map4d', lambda: self.__event_loop.create_task(self.run_udf(udf, self.computation._computation.cancel_id, executor, dataset=ds)))
             self.computation._computation.last_src_uuid = str(src.uuid)
             self.computation._computation.last_map_regions = copy.deepcopy([region.persistent_dict for region in map_regions])
@@ -237,8 +241,11 @@ class Map4DMenuItem:
             new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata)
             src.set_data_and_metadata(new_xdata)
 
-        computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(target.data.shape[0], 0))
-        computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(target.data.shape[1], 1))
+        while target.data is None:
+            time.sleep(0.1)
+        shape = target.data.shape
+        computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(shape[0], 0))
+        computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(shape[1], 1))
         computation.pick_graphic_binding_0.target_setter = functools.partial(_update_collection_index, 0)
         computation.pick_graphic_binding_1.target_setter = functools.partial(_update_collection_index, 1)
         
@@ -272,7 +279,8 @@ class Map4DMenuItem:
             pick_graphic = map_data_item.add_point_region(0.5, 0.5)
             pick_graphic.label = 'Pick'
             
-            self.__connect_pick_graphic(api_data_item, map_data_item, pick_graphic, computation._computation)
+            
+            threading.Thread(target=self.__connect_pick_graphic, args=(api_data_item, map_data_item, pick_graphic, computation._computation), daemon=True).start()
             
 #            def collection_index_changed(key):
 #                if key == 'collection_index':

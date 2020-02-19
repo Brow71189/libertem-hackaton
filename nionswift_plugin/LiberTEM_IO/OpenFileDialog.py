@@ -16,14 +16,19 @@ class OpenFileDialogUIHandler:
         self.params_callback = None
         self.tuple_to_string_converter = TupleToStringConverter()
         self.__file_params = {}
+        self.__params_value_names = []
 
         for i,param in enumerate(params):
-            self.__create_params_value(f'params_{i}', param['id'])
+            name = f'params_{i}'
+            self.__create_params_value(name, param['id'])
+            self.__params_value_names.append(name)
 
     def init_handler(self):
         pass
 
     def on_load(self, widget: Declarative.UIWidget):
+        for name in self.__params_value_names:
+            self.property_changed_event.fire(name)
         if callable(self.params_callback):
             self.params_callback(self.__file_params)
         if hasattr(self, 'request_close') and callable(self.request_close):
