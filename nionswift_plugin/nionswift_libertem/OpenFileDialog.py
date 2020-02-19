@@ -46,7 +46,7 @@ class OpenFileDialogUI:
 
         params = {
             'hdf5':[{'text':'Name', 'type':'text_box'}, {'text':'HDF5 Dataset Path', 'type':'text_box'}, {'text':'Tileshape', 'type':'text_box'}],
-            'raw':[{'text':'Name', 'type':'text_box'}, {'text':'Tileshape', 'type':'text_box'},{'text':'Scan Size', 'type':'text_box'}, {'text':'Datatype', 'type':'text_box'}, {'text':'Detector Size', 'type':'text_box'}, {'text':'Enable Direct I/O', 'type':'check_box'}],
+            'raw':[{'text':'Name', 'type':'text_box'},{'text':'Scan Size', 'type':'text_box'}, {'text':'Datatype', 'type':'text_box'}, {'text':'Detector Size', 'type':'text_box'}, {'text':'Enable Direct I/O', 'type':'check_box'}],
             'mib':[{'text':'Name', 'type':'text_box'}, {'text':'Tileshape', 'type':'text_box'}, {'text':'Scan Size', 'type':'text_box'}],
             'blo':[{'text':'Name', 'type':'text_box'}, {'text':'Tileshape', 'type':'text_box'}],
             'k2is':[{'text':'Name', 'type':'text_box'}],
