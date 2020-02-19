@@ -3,8 +3,21 @@ from libertem import api
 from libertem.executor.inline import InlineJobExecutor
 
 
+def convert_from_facade(x):
+    if hasattr(x, '__next__'):
+        return [convert_from_facade(xx) for xx in x]
+    if isinstance(x, list):
+        return [convert_from_facade(xx) for xx in x]
+    if isinstance(x, tuple):
+        return (convert_from_facade(xx) for xx in x)
+    if isinstance(x, dict):
+        return {k: convert_from_facade(v) for k, v in x.items()}
+    return x
+
+
 def dataset_from_data_item(ctx, data_item):
-    params = data_item.metadata['libertem-io']['file_parameters']
+    metadata = convert_from_facade(data_item.metadata)
+    params = metadata['libertem-io']['file_parameters']
     params['filetype'] = params.pop('type')
     return ctx.load(**params)
 

@@ -16,17 +16,17 @@ def strainmap(interactive: Interactive, api: API):
     window = api.application.document_windows[0]
     target_data_item = window.target_data_item
     ctx = iface.get_context()
-    ds = iface.dataset_from_data_item(ctx, target_data_item._proxy)
+    ds = iface.dataset_from_data_item(ctx, target_data_item)
     c = find_center_mask(target_data_item)
     if c is None:
         add_center_mask(interactive, target_data_item)
         return
-    size = np.array(c._proxy.size) * tuple(ds.shape.sig)
+    size = np.array(tuple(c.size)) * tuple(ds.shape.sig)
     radius = np.mean(size) / 2
     logsum = ctx.run_udf(udf=LogsumUDF(), dataset=ds)
     update_data(target_data_item, logsum['logsum'].data)
     pattern = BackgroundSubtraction(radius=radius, radius_outer=2*radius)
-    peaks = get_peaks(logsum['logsum'].data, pattern, 20)
+    peaks = get_peaks(logsum['logsum'].data, pattern, 15)
     nion_peaks = peaks / tuple(ds.shape.sig)
     nion_radius = radius / tuple(ds.shape.sig) * 2
     for p in nion_peaks:
@@ -52,24 +52,24 @@ def strainmap(interactive: Interactive, api: API):
 
 def find_center_mask(data_item):
     for g in data_item.graphics:
-        if g.type == 'ellipse-region' and g._proxy._graphic.role == 'mask':
+        if g.type == 'ellipse-region' and g._item.role == 'mask':
             return g
     return None
 
 
 def update_data(data_item, data):
-    metadata = data_item._proxy.metadata
-    dimensional_calibrations = data_item._proxy.dimensional_calibrations
-    intensity_calibration = data_item._proxy.intensity_calibration
+    metadata = iface.convert_from_facade(data_item.metadata)
+    dimensional_calibrations = list(data_item.dimensional_calibrations)
+    intensity_calibration = data_item.intensity_calibration
     data_item.data = data
-    data_item._proxy.set_metadata(metadata)
+    data_item.set_metadata(metadata)
     data_item.set_dimensional_calibrations(dimensional_calibrations)
     data_item.set_intensity_calibration(intensity_calibration)
 
 
 def add_center_mask(interactive: Interactive, data_item):
     e = data_item.add_ellipse_region(0.5, 0.5, 0.1, 0.1)
-    e._proxy._graphic.role = 'mask'
+    e._item.role = 'mask'
     interactive.alert("Adjust mask to zero order peak and run again")
 
 
