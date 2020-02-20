@@ -48,7 +48,7 @@ class OpenFileDialogUIHandler:
             self.property_changed_event.fire(name)
 
         setattr(OpenFileDialogUIHandler, name, property(getter, setter))
-        
+
 
 class OpenFileDialogUI:
     def get_ui_handler(self, api_broker: PlugInManager.APIBroker=None, event_loop: asyncio.AbstractEventLoop=None, file_ext: str=None, **kwargs):
@@ -88,9 +88,9 @@ class OpenFileDialogUI:
 
 
 class TupleToStringConverter:
-    
+
     def convert(self, value):
         return str(value)
-    
+
     def convert_back(self, formatted_value):
         return eval(formatted_value)

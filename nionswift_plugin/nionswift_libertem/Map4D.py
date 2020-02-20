@@ -21,6 +21,8 @@ from libertem.udf.masks import ApplyMasksUDF
 from libertem.udf.raw import PickUDF
 from libertem.executor.base import JobCancelledError
 
+from .libertem_adapter import LiberTEMAdapter
+
 _ = gettext.gettext
 
 
@@ -109,7 +111,7 @@ class Map4D:
                 return
             file_parameters = libertem_metadata['file_parameters']
             file_type = file_parameters.pop('type')
-            shape = src.xdata.data_shape
+            shape = src.xdata.datum_dimension_shape
             if map_regions:
                 mask_data = np.zeros(shape, dtype=np.bool)
                 for region in map_regions:
@@ -132,8 +134,7 @@ class Map4D:
             self.computation._computation.last_src_uuid = str(src.uuid)
             self.computation._computation.last_map_regions = copy.deepcopy([region.persistent_dict for region in map_regions])
             
-        except Exception as e:
-            print(str(e))
+        except Exception:
             import traceback
             traceback.print_exc()
 
@@ -210,39 +211,56 @@ class Map4DMenuItem:
         #box = document_controller.show_tool_tip_box(text, timeout)
         self.__tool_tip_boxes.append(box)
         
-    def __connect_pick_graphic(self, src, target, pick_graphic, computation):
+    def __connect_pick_graphic(self, src, target, pick_graphic, computation, do_wait=-1):
         def _update_collection_index(axis, value):
-            libertem_metadata = copy.deepcopy(src.metadata.get('libertem-io'))
-            if not libertem_metadata:
-                return
-            file_parameters = libertem_metadata['file_parameters']
-            file_type = file_parameters.pop('type')
-            current_index = libertem_metadata['display_slice']['start']
-            current_index = np.unravel_index(current_index, target.data.shape)
-            if value == current_index[axis]:
-                return
-            executor = Registry.get_component('libertem_executor')
-            if not executor:
-                return
-            executor = executor.ensure_sync()
-            ds = dataset.load(file_type, executor, **file_parameters)
-            roi = np.zeros(ds.shape.nav, dtype=bool)
-            if axis == 0:
-                roi[value, current_index[1]] = True
-                current_index = (value, current_index[1])
+            if src.xdata.is_collection or src.xdata.is_sequence:
+                display_item = self.__api.application._application.document_model.get_display_item_for_data_item(src._data_item)
+                collection_index = display_item.display_data_channel.collection_index
+                if axis == 0:
+                    if value != collection_index[0]:
+                        display_item.display_data_channel.collection_index = (value, collection_index[1], 0)
+                else:
+                    if value != collection_index[1]:
+                        display_item.display_data_channel.collection_index = (collection_index[0], value, 0)
             else:
-                roi[current_index[0], value] = True
-                current_index = (current_index[0], value)
-            result = UDFRunner(PickUDF()).run_for_dataset(ds, executor, roi=roi)
-            result_array = np.squeeze(np.array(result['intensity']))
-            new_metadata = copy.deepcopy(src.metadata)
-            new_display_slice = np.ravel_multi_index(current_index, target.data.shape)
-            new_metadata['libertem-io']['display_slice']['start'] = new_display_slice
-            new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata)
-            src.set_data_and_metadata(new_xdata)
-
-        while target.data is None:
-            time.sleep(0.1)
+                libertem_metadata = copy.deepcopy(src.metadata.get('libertem-io'))
+                if not libertem_metadata:
+                    return
+                file_parameters = libertem_metadata['file_parameters']
+                file_type = file_parameters.pop('type')
+                current_index = libertem_metadata['display_slice']['start']
+                current_index = np.unravel_index(current_index, target.data.shape)
+                if value == current_index[axis]:
+                    return
+                executor = Registry.get_component('libertem_executor')
+                if not executor:
+                    return
+                executor = executor.ensure_sync()
+                ds = dataset.load(file_type, executor, **file_parameters)
+                roi = np.zeros(ds.shape.nav, dtype=bool)
+                if axis == 0:
+                    roi[value, current_index[1]] = True
+                    current_index = (value, current_index[1])
+                else:
+                    roi[current_index[0], value] = True
+                    current_index = (current_index[0], value)
+                result = UDFRunner(PickUDF()).run_for_dataset(ds, executor, roi=roi)
+                result_array = np.squeeze(np.array(result['intensity']))
+                new_metadata = copy.deepcopy(src.metadata)
+                new_display_slice = np.ravel_multi_index(current_index, target.data.shape)
+                new_metadata['libertem-io']['display_slice']['start'] = new_display_slice
+                new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata)
+                src.set_data_and_metadata(new_xdata)
+        
+        if do_wait > 0:
+            starttime = time.time()
+            while target.data is None:
+                if time.time() - starttime > do_wait:
+                    break
+                time.sleep(0.1)
+        
+        if target.data is None:
+            return
         shape = target.data.shape
         computation.pick_graphic_binding_0 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 0, converter=FloatTupleToIntTupleConverter(shape[0], 0))
         computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(shape[1], 1))
@@ -258,9 +276,15 @@ class Map4DMenuItem:
 
         if data_item:
             api_data_item = Facade.DataItem(data_item)
+            ds = None
             if not api_data_item.xdata.metadata.get('libertem-io'):
-                self.__show_tool_tips('wrong_shape')
-                return
+                executor = Registry.get_component('libertem_executor')
+                if not executor:
+                    return
+                ds = LiberTEMAdapter(self.__api, executor).niondata_to_libertemdata(api_data_item)
+                if not api_data_item.xdata.metadata.get('libertem-io'):
+                    self.__show_tool_tips('wrong_shape')
+                    return
             map_data_item = self.__api.library.create_data_item(title='Map 4D of ' + data_item.title)
             display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item._data_item)
             show_display_item(window, display_item)
@@ -273,6 +297,8 @@ class Map4DMenuItem:
                                                                         'map_regions': map_regions},
                                                                 outputs={'target': map_data_item})
             computation._computation.source = data_item
+            if ds is not None:
+                computation._computation.ds = ds
 
             map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item)
             document_controller.show_display_item(map_display_item)
@@ -280,7 +306,7 @@ class Map4DMenuItem:
             pick_graphic.label = 'Pick'
             
             
-            threading.Thread(target=self.__connect_pick_graphic, args=(api_data_item, map_data_item, pick_graphic, computation._computation), daemon=True).start()
+            threading.Thread(target=self.__connect_pick_graphic, args=(api_data_item, map_data_item, pick_graphic, computation._computation, 30), daemon=True).start()
             
 #            def collection_index_changed(key):
 #                if key == 'collection_index':
