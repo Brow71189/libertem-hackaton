@@ -26,7 +26,7 @@ def strainmap(interactive: Interactive, api: API):
     logsum = ctx.run_udf(udf=LogsumUDF(), dataset=ds)
     update_data(target_data_item, logsum['logsum'].data)
     pattern = BackgroundSubtraction(radius=radius, radius_outer=2*radius)
-    peaks = get_peaks(logsum['logsum'].data, pattern, 15)
+    peaks = get_peaks(logsum['logsum'].data, pattern, 12)
     nion_peaks = peaks / tuple(ds.shape.sig)
     nion_radius = radius / tuple(ds.shape.sig) * 2
     for p in nion_peaks:
@@ -58,7 +58,7 @@ def find_center_mask(data_item):
 
 
 def update_data(data_item, data):
-    metadata = iface.convert_from_facade(data_item.metadata)
+    metadata = data_item.metadata
     dimensional_calibrations = list(data_item.dimensional_calibrations)
     intensity_calibration = data_item.intensity_calibration
     data_item.data = data
