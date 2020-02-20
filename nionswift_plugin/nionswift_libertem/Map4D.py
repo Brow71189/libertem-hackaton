@@ -173,7 +173,7 @@ class Map4DMenuItem:
                             pick_graphic = graphic
                             break
                     if pick_graphic is not None:
-                        self.__connect_pick_graphic(src, target, pick_graphic, computation)
+                        self.__connect_pick_graphic(Facade.DataItem(src), target_api, pick_graphic, computation)
             self.__display_item_changed_event_listener = (
                                document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
             
@@ -267,6 +267,20 @@ class Map4DMenuItem:
         computation.pick_graphic_binding_0.target_setter = functools.partial(_update_collection_index, 0)
         computation.pick_graphic_binding_1.target_setter = functools.partial(_update_collection_index, 1)
         
+        def collection_index_changed(key):
+            if src.xdata.is_collection:
+                display_item = self.__api.application._application.document_model.get_display_item_for_data_item(src._data_item)
+                if key == 'collection_index':
+                    collection_index = display_item.display_data_channel.collection_index
+                    if int(pick_graphic.position[0]*shape[0]) != collection_index[0]:
+                        computation.pick_graphic_binding_0.update_source(collection_index)
+                    if int(pick_graphic.position[1]*shape[1]) != collection_index[1]:
+                        computation.pick_graphic_binding_1.update_source(collection_index)
+        if src.xdata.is_collection:
+            display_item = self.__api.application._application.document_model.get_display_item_for_data_item(src._data_item)
+            computation.collection_index_changed_event_listener = display_item.display_data_channel.property_changed_event.listen(collection_index_changed)
+
+        
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
         document_controller = window._document_controller
@@ -308,15 +322,6 @@ class Map4DMenuItem:
             
             threading.Thread(target=self.__connect_pick_graphic, args=(api_data_item, map_data_item, pick_graphic, computation._computation, 30), daemon=True).start()
             
-#            def collection_index_changed(key):
-#                if key == 'collection_index':
-#                    collection_index = selected_display_item.display_data_channel.collection_index
-#                    if int(pick_graphic.position[0]*data_item.data.shape[0]) != collection_index[0]:
-#                        computation.pick_graphic_binding_0.update_source(collection_index)
-#                    if int(pick_graphic.position[1]*data_item.data.shape[1]) != collection_index[1]:
-#                        computation.pick_graphic_binding_1.update_source(collection_index)
-            #computation.collection_index_changed_event_listener = selected_display_item.display_data_channel.property_changed_event.listen(collection_index_changed)
-
             self.__computation_data_items.update({str(data_item.uuid): 'source',
                                                   str(map_data_item._data_item.uuid): 'map_4d'})
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('libertem_map4d_data_items_0', json.dumps(self.__computation_data_items))
