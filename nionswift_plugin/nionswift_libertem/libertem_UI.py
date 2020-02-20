@@ -6,6 +6,7 @@ import multiprocessing
 import sys
 
 import numpy as np
+import psutil
 
 from nion.utils import Event, Registry
 from nion.ui import Declarative
@@ -55,10 +56,13 @@ class LiberTEMUIHandler:
     def close(self):
         ...
 
-
-
     def get_libertem_executor(self):
-        executor = DaskJobExecutor.make_local()
+        cores = psutil.cpu_count(logical=False)
+        if cores is None:
+            cores = 2
+        executor = DaskJobExecutor.make_local(
+            cluster_kwargs={"threads_per_worker": 1, "n_workers": cores}
+        )
         return AsyncAdapter(wrapped=executor)
 
     def load_data(self, *args, **kwargs):
