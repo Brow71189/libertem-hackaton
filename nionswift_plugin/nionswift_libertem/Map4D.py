@@ -10,7 +10,6 @@ import threading
 
 # local libraries
 from nion.typeshed import API_1_0 as API
-from nion.data import xdata_1_0 as xd
 from nion.swift import Facade
 from nion.swift.model import Symbolic
 from nion.utils import Binding, Registry
@@ -87,7 +86,7 @@ class Map4D:
             )
     
             async for result in result_iter:
-                result_array = np.squeeze(np.swapaxes(np.array(result['intensity']), -1, 0))
+                result_array = np.squeeze(np.moveaxis(np.array(result['intensity']), -1, 0))
                 self.__new_xdata = self.get_xdata_for_results(result_array)
                 self.commit()
         except JobCancelledError:
