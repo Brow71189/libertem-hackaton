@@ -12,7 +12,7 @@ from scipy.ndimage import fourier_uniform, shift
 from nion.typeshed import API_1_0 as API
 from nion.swift import Facade
 from nion.swift.model import Symbolic
-from nion.utils import Registry
+from nion.utils import Registry, Binding, Converter
 
 from libertem.io import dataset
 from libertem.udf.base import UDFRunner, UDF
@@ -114,6 +114,9 @@ class AlignedSumUDF(UDF):
         image2_slice = image2
         if self.params.crop_slice_tuple is not None:
             image2_slice = image2[self.params.crop_slice_tuple]
+            center = np.array([slice_.start + (slice_.stop - slice_.start)*0.5 for slice_ in self.params.crop_slice_tuple])
+        else:
+            center = np.array(self.meta.dataset_shape.sig) * 0.5
         ccorr = normalized_corr(np.atleast_2d(image1), np.atleast_2d(image2_slice))
         error, maximum, max_pos = find_ccorr_max(ccorr)
         if error:
@@ -123,7 +126,7 @@ class AlignedSumUDF(UDF):
             logging.error(f'Cross-correlation coefficient below threshold ({maximum:.3g} < {self.params.ccorr_threshold}).')
             return
         
-        return max_pos
+        return np.array(max_pos) - center
     
     def preprocess(self):
         self.results.processed_frame_indices[:] = -1
@@ -132,7 +135,6 @@ class AlignedSumUDF(UDF):
         max_pos = self.calculate_shift(self.params.reference_frame, frame)
         if max_pos is None:
             return
-        max_pos = np.array(max_pos) - np.array(self.meta.dataset_shape.sig) * 0.5
         self.results.processed_frame_indices[self.meta.slice.origin[0]] = self.meta.slice.origin[0]
         self.results.shifts_buffer[:] = max_pos
         shifted = shift(frame, max_pos, order=1, cval=np.mean(frame))
@@ -161,7 +163,13 @@ class AlignedAverage:
         self.computation = computation
         self.__api = computation.api
         self.__event_loop = self.__api.application.document_controllers[0]._document_controller.event_loop
+        self.__objects_to_close = list()
         
+        def close_ui():
+            for obj in self.__objects_to_close:
+                obj.unbind_text()
+            self.__objects_to_close = list()
+            
         def create_panel_widget(ui, document_controller):
             def select_button_clicked():
                 graphics = Facade.DataItem(self.computation._computation.source).graphics
@@ -177,13 +185,21 @@ class AlignedAverage:
                 for graphic in graphics:
                     if graphic._graphic.role == 'mask':
                         self.computation._computation.insert_item_into_objects('map_regions', 0, Symbolic.make_item(graphic._graphic, type='graphic'))
-
+            
+            x_index_variable = self.computation._computation._get_variable('reference_frame_index_1')
+            y_index_variable = self.computation._computation._get_variable('reference_frame_index_0')
             column = ui.create_column_widget()
             row = ui.create_row_widget()
 
-            select_graphics_button = ui.create_push_button_widget('Update masks')
+            label = ui.create_label_widget('Reference frame index (x, y):')
+            x_index_line = ui.create_line_edit_widget()
+            y_index_line = ui.create_line_edit_widget()
             row.add_spacing(10)
-            row.add(select_graphics_button)
+            row.add(label)
+            row.add_spacing(5)
+            row.add(x_index_line)
+            row.add_spacing(5)
+            row.add(y_index_line)
             row.add_stretch()
             row.add_spacing(10)
 
@@ -191,12 +207,19 @@ class AlignedAverage:
             column.add(row)
             column.add_spacing(10)
             column.add_stretch()
-
-            select_graphics_button.on_clicked = select_button_clicked
+            
+            if x_index_variable:
+                x_index_line._widget.bind_text(Binding.PropertyBinding(x_index_variable, 'value', converter=Converter.IntegerToStringConverter()))
+            if y_index_variable:
+                y_index_line._widget.bind_text(Binding.PropertyBinding(y_index_variable, 'value', converter=Converter.IntegerToStringConverter()))
+            
+            self.__objects_to_close.append(x_index_line._widget)
+            self.__objects_to_close.append(y_index_line._widget)
 
             return column
-        # Disable mask updating for now because it is broken
-        # self.computation._computation.create_panel_widget = create_panel_widget
+
+        self.computation._computation.create_panel_widget = create_panel_widget
+        self.computation._computation.close_ui = close_ui
         
     def get_xdata_for_results(self, result_array, is_sequence=False):
         data_descriptor = self.__api.create_data_descriptor(is_sequence, 0, 2)
@@ -224,13 +247,28 @@ class AlignedAverage:
             
     def execute(self, src, align_region, reference_frame_index_0, reference_frame_index_1):
         try:
+            continue_ = False
             if align_region:
                 align_region = align_region[0]
-            if hasattr(self.computation._computation, 'last_src_uuid') and hasattr(self.computation._computation, 'last_align_region'):
-                if str(src.uuid) == self.computation._computation.last_src_uuid and align_region.persistent_dict == self.computation._computation.last_align_region:
-                    return
-                if str(src.uuid) != self.computation._computation.last_src_uuid and hasattr(self.computation._computation, 'ds'):
-                    self.computation._computation.ds = None
+            if hasattr(self.computation._computation, 'last_src_uuid'):
+                if str(src.uuid) != self.computation._computation.last_src_uuid:
+                    continue_ = True
+                    if hasattr(self.computation._computation, 'ds'):
+                        self.computation._computation.ds = None
+            else:
+                continue_ = True
+            if hasattr(self.computation._computation, 'last_align_region'):        
+                if align_region.persistent_dict != self.computation._computation.last_align_region:
+                    continue_ = True
+            else:
+                continue_ = True
+            if hasattr(self.computation._computation, 'last_reference_frame_index'):
+                if (reference_frame_index_0, reference_frame_index_1) != self.computation._computation.last_reference_frame_index:
+                    continue_ = True
+            else:
+                continue_ = True
+            if not continue_:
+                return
             metadata = copy.deepcopy(src.xdata.metadata)
             libertem_metadata = metadata.get('libertem-io')
             if libertem_metadata is None:
@@ -258,7 +296,7 @@ class AlignedAverage:
             else:
                 ds = dataset.load(file_type, executor.ensure_sync(), **file_parameters)
                 self.computation._computation.ds = ds
-            
+                
             if len(ds.shape.nav) == 2:
                 reference_frame_index = (reference_frame_index_0, reference_frame_index_1)
             else:
@@ -269,7 +307,7 @@ class AlignedAverage:
             else:
                 roi = np.zeros(ds.shape.nav, dtype=bool)
                 roi[reference_frame_index] = 1
-                result = UDFRunner(PickUDF()).run_for_dataset(ds, executor, roi=roi)
+                result = UDFRunner(PickUDF()).run_for_dataset(ds, executor.ensure_sync(), roi=roi)
                 reference_frame = np.squeeze(np.array(result['intensity']))
                 
             udf = AlignedSumUDF(reference_frame, crop_slice_tuple=crop_slice_tuple)
@@ -279,9 +317,11 @@ class AlignedAverage:
                 self.__api.queue_task(lambda: self.__event_loop.create_task(executor.cancel(to_cancel)))
             self.computation._computation.cancel_id = str(time.time())
             dc.add_task('libertem-aligend_average', lambda: self.__event_loop.create_task(self.run_udf(udf, self.computation._computation.cancel_id, executor, dataset=ds)))
+            
             self.computation._computation.last_src_uuid = str(src.uuid)
             if align_region:
                 self.computation._computation.last_align_region = copy.deepcopy(align_region.persistent_dict)
+            self.computation._computation.last_reference_frame_index = (reference_frame_index_0, reference_frame_index_1)
             
         except Exception:
             import traceback
@@ -386,7 +426,17 @@ class AlignedAverageMenuItem:
             computation._computation.source = data_item
             if ds is not None:
                 computation._computation.ds = ds
-
+                x_index_variable = computation._computation._get_variable('reference_frame_index_1')
+                y_index_variable = computation._computation._get_variable('reference_frame_index_0')
+                x_index_variable.value_min = 0
+                y_index_variable.value_min = 0
+                if len(ds.shape.nav) > 1:
+                    x_index_variable.value_max = ds.shape.nav[1] - 1
+                    y_index_variable.value_max = ds.shape.nav[0] - 1
+                else:
+                    x_index_variable.value_max = ds.shape.nav[0] - 1
+                    y_index_variable.value_max = 0
+              
             self.__computation_data_items.update({str(data_item.uuid): 'source',
                                                   str(shifts_data_item._data_item.uuid): 'shifts_data_item',
                                                   str(average_data_item._data_item.uuid): 'average_data_item'})
