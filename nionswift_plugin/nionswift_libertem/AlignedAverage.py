@@ -89,6 +89,7 @@ def find_ccorr_max(ccorr):
                                                    (max_x[2], max_pos[1]+1))
         return 0, ccorr[max_pos], (parabola_y[1], parabola_x[1])
     else:
+        max_pos = max_pos[0]
         max_x = ccorr[max_pos-1:max_pos+2]
         parabola_x = parabola_through_three_points((max_x[0], max_pos-1),
                                                    (max_x[1], max_pos),
@@ -222,7 +223,8 @@ class AlignedAverage:
         self.computation._computation.close_ui = close_ui
         
     def get_xdata_for_results(self, result_array, is_sequence=False):
-        data_descriptor = self.__api.create_data_descriptor(is_sequence, 0, 2)
+        ndim = result_array.ndim - int(is_sequence)
+        data_descriptor = self.__api.create_data_descriptor(is_sequence, 0, ndim)
         intensity_calibration = self.__api.create_calibration()
         xdata = self.__api.create_data_and_metadata(result_array,
                                                     intensity_calibration=intensity_calibration,
@@ -288,7 +290,7 @@ class AlignedAverage:
                     width = round(align_region.bounds[1][1] * shape[1])
                     crop_slice_tuple = (slice(top, top + height), slice(left, left + width))
                 elif align_region.type == 'interval-graphic':
-                    crop_slice_tuple = (slice(align_region.interval[0] * shape[0], align_region.interval[1] * shape[0]), )
+                    crop_slice_tuple = (slice(round(align_region.interval[0] * shape[0]), round(align_region.interval[1] * shape[0])), )
             else:
                 crop_slice_tuple = None
             if hasattr(self.computation._computation, 'ds') and self.computation._computation.ds:
@@ -309,7 +311,7 @@ class AlignedAverage:
                 roi[reference_frame_index] = 1
                 result = UDFRunner(PickUDF()).run_for_dataset(ds, executor.ensure_sync(), roi=roi)
                 reference_frame = np.squeeze(np.array(result['intensity']))
-                
+            
             udf = AlignedSumUDF(reference_frame, crop_slice_tuple=crop_slice_tuple)
             dc = self.__api.application.document_controllers[0]._document_controller
             if hasattr(self.computation._computation, 'cancel_id'):
@@ -412,10 +414,23 @@ class AlignedAverageMenuItem:
             display_item = document_controller.document_model.get_display_item_for_data_item(average_data_item._data_item)
             show_display_item(window, display_item)
             align_region = list()
-            for graphic in api_data_item.graphics:
-                if graphic._graphic.role == 'mask' and graphic.graphic_type in {'rect-graphic', 'interval-graphic'}:
-                    align_region.append(graphic)
-                    break
+            
+            selection_data_item = None
+            
+            if api_data_item.xdata.collection_dimension_count == 2 and api_data_item.xdata.datum_dimension_count == 1:
+                for computation in self.__api.application._application.document_model.computations:
+                     if computation.processing_id == 'pick-point' and data_item in computation._inputs:
+                         selection_data_item = Facade.DataItem(computation.get_output('target'))
+                         break
+            elif (api_data_item.xdata.is_sequence or api_data_item.xdata.collection_dimension_count == 1) and api_data_item.xdata.datum_dimension_count in {1, 2}:
+                selection_data_item = api_data_item
+            
+            if selection_data_item:
+                for graphic in selection_data_item.graphics:
+                    if graphic._graphic.role == 'mask' and graphic.graphic_type in {'rect-graphic', 'interval-graphic'}:
+                        align_region.append(graphic)
+                        break
+                 
             computation = self.__api.library.create_computation('nion.libertem.aligned_average',
                                                                 inputs={'src': api_data_item,
                                                                         'align_region': align_region,
