@@ -30,7 +30,7 @@ class Map4D:
         self.computation = computation
         self.__api = computation.api
         self.__event_loop = self.__api.application.document_controllers[0]._document_controller.event_loop
-        
+
         def create_panel_widget(ui, document_controller):
             def select_button_clicked():
                 graphics = Facade.DataItem(self.computation._computation.source).graphics
@@ -66,7 +66,7 @@ class Map4D:
             return column
         # Disable mask updating for now because it is broken
         # self.computation._computation.create_panel_widget = create_panel_widget
-        
+
     def get_xdata_for_results(self, result_array):
         data_descriptor = self.__api.create_data_descriptor(False, 0, 2)
         dimensional_calibrations = [
@@ -78,20 +78,20 @@ class Map4D:
                                                     intensity_calibration=intensity_calibration,
                                                     data_descriptor=data_descriptor)
         return xdata
-        
+
     async def run_udf(self, udf: UDF, cancel_id, executor, dataset, roi=None):
         try:
             result_iter = UDFRunner(udf).run_for_dataset_async(
                 dataset, executor, roi=roi, cancel_id=cancel_id,
             )
-    
+
             async for result in result_iter:
                 result_array = np.squeeze(np.moveaxis(np.array(result['intensity']), -1, 0))
                 self.__new_xdata = self.get_xdata_for_results(result_array)
                 self.commit()
         except JobCancelledError:
             pass
-            
+
     def execute(self, src, map_regions):
         try:
             if hasattr(self.computation._computation, 'last_src_uuid') and hasattr(self.computation._computation, 'last_map_regions'):
@@ -132,7 +132,7 @@ class Map4D:
             dc.add_task('libertem-map4d', lambda: self.__event_loop.create_task(self.run_udf(udf, self.computation._computation.cancel_id, executor, dataset=ds)))
             self.computation._computation.last_src_uuid = str(src.uuid)
             self.computation._computation.last_map_regions = copy.deepcopy([region.persistent_dict for region in map_regions])
-            
+
         except Exception:
             import traceback
             traceback.print_exc()
@@ -161,7 +161,9 @@ class Map4DMenuItem:
             document_model = self.__api.application._application.document_model
             for computation in document_model.computations:
                 src = computation.get_input('src')
-                if src and self.__computation_data_items.get(str(src.uuid)) == 'source':
+                if hasattr(src, 'data_item') and src.data_item:
+                    src = src.data_item
+                if src and hasattr(src, 'uuid') and self.__computation_data_items.get(str(src.uuid)) == 'source':
                     target = computation.get_output('target')
                     if target is None:
                         continue
@@ -175,12 +177,12 @@ class Map4DMenuItem:
                         self.__connect_pick_graphic(Facade.DataItem(src), target_api, pick_graphic, computation)
             self.__display_item_changed_event_listener = (
                                document_controller.focused_display_item_changed_event.listen(self.__display_item_changed))
-            
+
         def schedule_init():
             while not self.__api.application.document_controllers:
                 time.sleep(0.5)
             self.__api.queue_task(init)
-            
+
         threading.Thread(target=schedule_init, daemon=True).start()
 
     def __display_item_changed(self, display_item):
@@ -209,7 +211,7 @@ class Map4DMenuItem:
         box = workspace.pose_tool_tip_box(text, timeout)
         #box = document_controller.show_tool_tip_box(text, timeout)
         self.__tool_tip_boxes.append(box)
-        
+
     def __connect_pick_graphic(self, src, target, pick_graphic, computation, do_wait=-1):
         def _update_collection_index(axis, value):
             if src.xdata.is_collection or src.xdata.is_sequence:
@@ -250,14 +252,14 @@ class Map4DMenuItem:
                 new_metadata['libertem-io']['display_slice']['start'] = new_display_slice
                 new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata)
                 src.set_data_and_metadata(new_xdata)
-        
+
         if do_wait > 0:
             starttime = time.time()
             while target.data is None:
                 if time.time() - starttime > do_wait:
                     break
                 time.sleep(0.1)
-        
+
         if target.data is None:
             return
         shape = target.data.shape
@@ -265,7 +267,7 @@ class Map4DMenuItem:
         computation.pick_graphic_binding_1 = Binding.TuplePropertyBinding(pick_graphic._graphic, 'position', 1, converter=FloatTupleToIntTupleConverter(shape[1], 1))
         computation.pick_graphic_binding_0.target_setter = functools.partial(_update_collection_index, 0)
         computation.pick_graphic_binding_1.target_setter = functools.partial(_update_collection_index, 1)
-        
+
         def collection_index_changed(key):
             if src.xdata.is_collection:
                 display_item = self.__api.application._application.document_model.get_display_item_for_data_item(src._data_item)
@@ -279,7 +281,7 @@ class Map4DMenuItem:
             display_item = self.__api.application._application.document_model.get_display_item_for_data_item(src._data_item)
             computation.collection_index_changed_event_listener = display_item.display_data_channel.property_changed_event.listen(collection_index_changed)
 
-        
+
 
     def menu_item_execute(self, window: API.DocumentWindow) -> None:
         document_controller = window._document_controller
@@ -317,10 +319,10 @@ class Map4DMenuItem:
             document_controller.show_display_item(map_display_item)
             pick_graphic = map_data_item.add_point_region(0.5, 0.5)
             pick_graphic.label = 'Pick'
-            
-            
+
+
             threading.Thread(target=self.__connect_pick_graphic, args=(api_data_item, map_data_item, pick_graphic, computation._computation, 30), daemon=True).start()
-            
+
             self.__computation_data_items.update({str(data_item.uuid): 'source',
                                                   str(map_data_item._data_item.uuid): 'map_4d'})
             self.__api.application.document_controllers[0]._document_controller.ui.set_persistent_string('libertem_map4d_data_items_0', json.dumps(self.__computation_data_items))
@@ -336,8 +338,8 @@ def show_display_item(document_window, display_item):
     if result_display_panel:
         result_display_panel.set_display_panel_display_item(display_item)
         result_display_panel.request_focus()
-        
-        
+
+
 class FloatTupleToIntTupleConverter:
     def __init__(self, axis_size, axis_index):
         self.axis_size = axis_size
