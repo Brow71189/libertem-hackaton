@@ -76,7 +76,8 @@ class LiberTEMIODelegate:
             return
         executor = executor.ensure_sync()
         file_parameters = dataset.detect(stream, executor=executor)
-        file_type = file_parameters.pop('type', None)
+        file_type = file_parameters.get('type', None)
+        file_parameters = file_parameters["parameters"]
         if file_type is None:
             file_type = 'raw'
             file_parameters = {'path': stream}
