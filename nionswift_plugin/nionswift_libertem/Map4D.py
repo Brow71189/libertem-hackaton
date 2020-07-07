@@ -33,24 +33,24 @@ class Map4D:
 
         def create_panel_widget(ui, document_controller):
             def select_button_clicked():
-                graphics = Facade.DataItem(self.computation._computation.source).graphics
+                graphics = []
+                for graphic in document_controller.target_display.graphics:
+                    if graphic._graphic.used_role in {'mask', 'fourier_mask'}:
+                        graphics.append(graphic)
                 if not graphics:
                     return
-                graphics_variable = self.computation._computation._get_variable('map_regions')
-                graphics_variable.disconnect_items()
-                if graphics_variable.bound_items_model is None:
-                    return
-                num_items = len(graphics_variable.bound_items_model.items)
-                for _ in range(num_items):
-                    self.computation._computation.remove_item_from_objects('map_regions', 0)
+                try:
+                    while True:
+                        self.computation._computation.remove_item_from_objects('map_regions', 0)
+                except IndexError:
+                    pass
                 for graphic in graphics:
-                    if graphic._graphic.role == 'mask':
-                        self.computation._computation.insert_item_into_objects('map_regions', 0, Symbolic.make_item(graphic._graphic, type='graphic'))
+                    self.computation._computation.insert_item_into_objects('map_regions', 0, Symbolic.make_item(graphic._graphic))
 
             column = ui.create_column_widget()
             row = ui.create_row_widget()
 
-            select_graphics_button = ui.create_push_button_widget('Update masks')
+            select_graphics_button = ui.create_push_button_widget('Select map graphic')
             row.add_spacing(10)
             row.add(select_graphics_button)
             row.add_stretch()
@@ -64,8 +64,8 @@ class Map4D:
             select_graphics_button.on_clicked = select_button_clicked
 
             return column
-        # Disable mask updating for now because it is broken
-        # self.computation._computation.create_panel_widget = create_panel_widget
+
+        self.computation._computation.create_panel_widget = create_panel_widget
 
     def get_xdata_for_results(self, result_array):
         data_descriptor = self.__api.create_data_descriptor(False, 0, 2)
@@ -250,7 +250,9 @@ class Map4DMenuItem:
                 new_metadata = copy.deepcopy(src.metadata)
                 new_display_slice = np.ravel_multi_index(current_index, target.data.shape)
                 new_metadata['libertem-io']['display_slice']['start'] = new_display_slice
-                new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata)
+                new_xdata = self.__api.create_data_and_metadata(result_array, metadata=new_metadata,
+                                                                intensity_calibration=src.intensity_calibration,
+                                                                dimensional_calibrations=src.dimensional_calibrations)
                 src.set_data_and_metadata(new_xdata)
 
         if do_wait > 0:
@@ -305,18 +307,18 @@ class Map4DMenuItem:
             show_display_item(window, display_item)
             map_regions = list()
             for graphic in api_data_item.graphics:
-                if graphic._graphic.role == 'mask':
+                if graphic._graphic.used_role in {'mask', 'fourier_mask'}:
                     map_regions.append(graphic)
             computation = self.__api.library.create_computation('nion.libertem.map_4d',
                                                                 inputs={'src': api_data_item,
                                                                         'map_regions': map_regions},
                                                                 outputs={'target': map_data_item})
-            computation._computation.source = data_item
+            computation._computation.source = map_data_item._data_item
             if ds is not None:
                 computation._computation.ds = ds
 
-            map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item)
-            document_controller.show_display_item(map_display_item)
+            #map_display_item = document_controller.document_model.get_display_item_for_data_item(map_data_item._data_item)
+            #document_controller.show_display_item(map_display_item)
             pick_graphic = map_data_item.add_point_region(0.5, 0.5)
             pick_graphic.label = 'Pick'
 

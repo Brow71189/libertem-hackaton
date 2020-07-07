@@ -43,7 +43,6 @@ class OpenFileDialogUIHandler:
             return self.__file_params.get(property_name)
 
         def setter(self, value):
-            print(type(value))
             self.__file_params[property_name] = value
             self.property_changed_event.fire(name)
 

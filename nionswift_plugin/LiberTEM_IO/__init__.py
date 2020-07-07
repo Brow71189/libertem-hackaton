@@ -37,7 +37,7 @@ class LiberTEMIODelegate:
         self.__file_param_dialog_closed_event = threading.Event()
         self.__file_param_dialog_closed_event.set()
         self.__show_file_param_dialog_finished_event = threading.Event()
-        
+
     def show_file_param_dialog(self, file_ext: str=None, params_callback: callable=None):
         if self.__file_param_dialog_closed_event.is_set():
             document_controller = self.__api.application.document_controllers[0]._document_controller
@@ -57,12 +57,12 @@ class LiberTEMIODelegate:
                 ui_handler.init_handler()
 
             dialog.show()
-            
+
             ui_handler.request_close = dialog.request_close
 
             self.__file_param_dialog_closed_event.clear()
         self.__show_file_param_dialog_finished_event.set()
-        
+
     def can_write_data_and_metadata(self, data_and_metadata, extension):
         return False
 
@@ -77,21 +77,21 @@ class LiberTEMIODelegate:
         executor = executor.ensure_sync()
         file_parameters = dataset.detect(stream, executor=executor)
         file_type = file_parameters.get('type', None)
-        file_parameters = file_parameters["parameters"]
+        file_parameters = file_parameters.get('parameters', dict())
         if file_type is None:
             file_type = 'raw'
             file_parameters = {'path': stream}
         file_params = dict()
         def params_callback(file_params_):
             file_params.update(file_params_)
-            
+
         self.__api.queue_task(lambda: self.show_file_param_dialog(file_type, params_callback))
         self.__show_file_param_dialog_finished_event.wait()
         self.__show_file_param_dialog_finished_event.clear()
         self.__file_param_dialog_closed_event.wait()
         file_params.pop('name', None)
         file_parameters.update(file_params)
-        
+
         ds = dataset.load(file_type, executor, **file_parameters)
         roi = np.zeros(ds.shape.nav, dtype=bool)
         roi_flat = roi.ravel()
@@ -104,7 +104,7 @@ class LiberTEMIODelegate:
 
     def write_data_item(self, data_item, file_path, extension) -> None:
         self.write_data_item_stream(data_item, file_path)
-        
+
     def write_data_item_stream(self, data_item, stream) -> None:
         self.write_data_and_metadata_stream(data_item.xdata, stream)
 
