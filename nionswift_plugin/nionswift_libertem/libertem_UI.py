@@ -14,11 +14,9 @@ from nion.swift.model import PlugInManager
 from nion.swift import Workspace, DocumentController, Panel, Facade
 from nion.typeshed import API_1_0
 
-from libertem.executor.base import AsyncAdapter
-from libertem.executor.dask import DaskJobExecutor
+from libertem import api as lt
 from libertem.udf.base import UDFRunner, UDF
 from libertem.udf.masks import ApplyMasksUDF
-from libertem.io.dataset import load
 
 
 _ = gettext.gettext
@@ -50,38 +48,28 @@ class LiberTEMUIHandler:
         # Needed for method "spawn" (on Windows) to prevent mutliple Swift instances from being started
         if multiprocessing.get_start_method() == 'spawn':
             multiprocessing.set_executable(os.path.join(sys.exec_prefix, 'pythonw.exe'))
-        self.executor = self.get_libertem_executor()
-        Registry.register_component(self.executor, {'libertem_executor'})
+        self.context = self.get_libertem_context()
+        Registry.register_component(self.context, {'libertem_context'})
 
     def close(self):
-        ...
+        self.context.close()
 
-    def get_libertem_executor(self):
-        cores = psutil.cpu_count(logical=False)
-        if cores is None:
-            cores = 2
-        executor = DaskJobExecutor.make_local(
-            cluster_kwargs={"threads_per_worker": 1, "n_workers": cores}
-        )
-        return AsyncAdapter(wrapped=executor)
+    def get_libertem_context(self):
+        return lt.Context()
 
     def load_data(self, *args, **kwargs):
-        sync_executor = self.executor._wrapped
-        ds = sync_executor.run_function(load, *args, **kwargs)
-        ds = ds.initialize(sync_executor)
-        ds.set_num_cores(len(sync_executor.get_available_workers()))
-        sync_executor.run_function(ds.check_valid)
+        ds = self.context.load(*args, **kwargs)
         return ds
 
     async def run_udf(self, udf: UDF, dataset, roi=None):
-        result_iter = UDFRunner(udf).run_for_dataset_async(
-            dataset, self.executor, roi=roi, cancel_id="42",
+        result_iter = self.context.run_udf_iter(
+            dataset=dataset, udf=udf, roi=roi, sync=False,
         )
-
         data_item = None
 
         async for result in result_iter:
-            result_array = np.swapaxes(np.array(result['intensity']), -1, 0)
+            result_array = result.buffers[0]['intensity'].data
+            result_array = np.swapaxes(np.array(result_array), -1, 0)
             if data_item is None:
                 data_item = self.show_results(result_array=result_array)
             else:

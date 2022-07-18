@@ -57,7 +57,7 @@ class OpenFileDialogUI:
         params = {
             'hdf5':[{'text': 'Name', 'type': 'text_box', 'id': 'name'}, {'text': 'HDF5 Dataset Path', 'type': 'text_box', 'id': 'ds_path'}, {'text': 'Tileshape', 'type': 'text_box', 'id': 'tileshape', 'converter': 'tuple_to_string_converter'}],
             'raw':[{'text': 'Name', 'type': 'text_box', 'id': 'name'}, {'text': 'Scan Size', 'type': 'text_box', 'id': 'scan_size', 'converter': 'tuple_to_string_converter'}, {'text': 'Datatype', 'type': 'text_box', 'id': 'dtype'}, {'text': 'Detector Size', 'type': 'text_box', 'id': 'detector_size', 'converter': 'tuple_to_string_converter'}, {'text': 'Enable Direct I/O', 'type': 'check_box', 'id': 'enable_direct'}],
-            'mib':[{'text': 'Name', 'type': 'text_box', 'id': 'name'}, {'text': 'Tileshape', 'type': 'text_box', 'id': 'tileshape', 'converter': 'tuple_to_string_converter'}, {'text': 'Scan Size', 'type': 'text_box', 'id': 'scan_size', 'converter': 'tuple_to_string_converter'}],
+            'mib':[{'text': 'Name', 'type': 'text_box', 'id': 'name'}, {'text': 'Scan Size', 'type': 'text_box', 'id': 'nav_shape', 'converter': 'tuple_to_string_converter'}],
             'blo':[{'text': 'Name', 'type': 'text_box', 'id': 'name'}, {'text': 'Tileshape', 'type': 'text_box', 'id': 'tileshape', 'converter': 'tuple_to_string_converter'}],
             'k2is':[{'text': 'Name', 'type': 'text_box', 'id': 'name'}],
             'ser':[{'text': 'Name', 'type': 'text_box', 'id': 'name'}],
