@@ -70,7 +70,8 @@ class LiberTEMIODelegate:
         return self.read_data_and_metadata_from_stream(file_path)
 
     def read_data_and_metadata_from_stream(self, stream):
-        executor = Registry.get_component('libertem_executor')
+        context = Registry.get_component('libertem_context')
+        executor = context.executor
         if executor is None:
             logging.error('No libertem executor could be retrieved from the Registry.')
             return
@@ -92,7 +93,7 @@ class LiberTEMIODelegate:
         file_params.pop('name', None)
         file_parameters.update(file_params)
 
-        ds = dataset.load(file_type, executor, **file_parameters)
+        ds = context.load(file_type, **file_parameters)
         roi = np.zeros(ds.shape.nav, dtype=bool)
         roi_flat = roi.ravel()
         roi_flat[0] = True
